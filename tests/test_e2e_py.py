@@ -11,14 +11,28 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
 BASE_URL = os.environ.get('BASE_URL', 'http://localhost:3000')
+# Set a default wait time (e.g., 10 seconds) for dynamic elements
+WAIT_TIME = 10
 
 
 @pytest.fixture(scope="module")
 def driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless=new')
+    
+    # Check for the CHROME_ARGS environment variable set in the Jenkins script
+    chrome_args = os.environ.get('CHROME_ARGS', '').split()
+    for arg in chrome_args:
+        chrome_options.add_argument(arg)
 
-    chrome_options.add_argument('--no-sandbox')
+    # Ensure essential server options are always present even if CHROME_ARGS isn't set perfectly
+    if '--headless' not in str(chrome_options) and '--headless=new' not in str(chrome_options):
+         chrome_options.add_argument('--headless=new')
+    if '--no-sandbox' not in str(chrome_options):
+        chrome_options.add_argument('--no-sandbox')
+    if '--disable-gpu' not in str(chrome_options):
+        chrome_options.add_argument('--disable-gpu')
+
+
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--window-size=1280,1024')
 
@@ -31,7 +45,7 @@ def driver():
 
 def test_01_home_loads(driver):
     driver.get(f"{BASE_URL}/")
-    WebDriverWait(driver, 5).until(
+    WebDriverWait(driver, WAIT_TIME).until(
         EC.presence_of_element_located((By.TAG_NAME, "body"))
     )
     assert len(driver.title) > 0
@@ -39,6 +53,10 @@ def test_01_home_loads(driver):
 
 def test_02_companies_search_and_list(driver):
     driver.get(f"{BASE_URL}/companies")
+    # --- ADDED WAIT ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='company'], .company, .company-list, ul"))
+    )
     search = driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='company']")
     listing = driver.find_elements(By.CSS_SELECTOR, ".company, .company-list, ul")
     assert len(search) > 0 or len(listing) > 0
@@ -46,6 +64,10 @@ def test_02_companies_search_and_list(driver):
 
 def test_03_salaries_page_elements(driver):
     driver.get(f"{BASE_URL}/salaries")
+    # --- ADDED WAIT ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='job']"))
+    )
     job_input = driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='job']")
     salary_boxes = driver.find_elements(By.CSS_SELECTOR, ".salary-container, .salary-box")
     assert len(job_input) > 0
@@ -54,6 +76,10 @@ def test_03_salaries_page_elements(driver):
 
 def test_04_login_fields(driver):
     driver.get(f"{BASE_URL}/login")
+    # --- ADDED WAIT ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email'], input[name='email']"))
+    )
     email = driver.find_elements(By.CSS_SELECTOR, "input[type='email'], input[name='email']")
     password = driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
     assert len(email) > 0
@@ -62,6 +88,10 @@ def test_04_login_fields(driver):
 
 def test_05_apply_form_elements(driver):
     driver.get(f"{BASE_URL}/job/apply")
+    # --- ADDED WAIT ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='John']"))
+    )
     first = driver.find_elements(By.CSS_SELECTOR, "input[placeholder='John']")
     resume = driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
     submit = driver.find_elements(By.CSS_SELECTOR, "button[type='Submit']")
@@ -71,6 +101,10 @@ def test_05_apply_form_elements(driver):
 
 def test_06_companies_search_no_crash(driver):
     driver.get(f"{BASE_URL}/companies")
+    # --- ADDED WAIT (implicit in how test works, but good practice to add explicitly) ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body"))
+    )
     inputs = driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='company']")
     if inputs:
         inputs[0].send_keys("Test")
@@ -80,6 +114,10 @@ def test_06_companies_search_no_crash(driver):
 
 def test_07_salaries_search_no_crash(driver):
     driver.get(f"{BASE_URL}/salaries")
+    # --- ADDED WAIT ---
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body"))
+    )
     inputs = driver.find_elements(By.CSS_SELECTOR, "input[placeholder*='job']")
     if inputs:
         inputs[0].send_keys("Engineer")
@@ -88,6 +126,9 @@ def test_07_salaries_search_no_crash(driver):
 
 def test_08_navigation_links(driver):
     driver.get(BASE_URL)
+    WebDriverWait(driver, WAIT_TIME).until(
+        EC.presence_of_element_located((By.TAG_NAME, "a"))
+    )
     links = driver.find_elements(By.TAG_NAME, "a")
     clicked = False
     for link in links[:5]:
@@ -103,7 +144,7 @@ def test_08_navigation_links(driver):
 
 def test_09_protected_route_access(driver):
     driver.get(f"{BASE_URL}/protected")
-    WebDriverWait(driver, 5).until(
+    WebDriverWait(driver, WAIT_TIME).until(
         EC.presence_of_element_located((By.TAG_NAME, "body"))
     )
     assert True
@@ -114,6 +155,8 @@ def test_10_api_salaries_not_html():
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
         "Accept": "application/json",
     }
-    res = requests.get(f"{BASE_URL}/api/salaries", timeout=5, headers=headers)
+    # Use BASE_URL for API test as well (assuming API is hosted there)
+    res = requests.get(f"{BASE_URL}/api/salaries", timeout=WAIT_TIME, headers=headers)
     assert res.status_code < 500
     assert "<html" not in res.text.lower()
+
